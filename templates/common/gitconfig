@@ -1,0 +1,57 @@
+[core]
+	editor = /usr/bin/vim
+	excludesfile = /Users/sbostick/.config/git/ignore
+[user]
+	name = Shane Bostick
+	email = sbostick@users.noreply.github.com
+ 	signingkey = BCCEF09EA13C18A8
+[merge]
+	tool = vimdiff
+[push]
+	default = simple
+[color]
+	ui = true
+[filter "hawser"]
+	clean = git hawser clean %f
+	smudge = git hawser smudge %f
+	required = true
+[difftool "sourcetree"]
+	cmd = opendiff \"$LOCAL\" \"$REMOTE\"
+[mergetool "sourcetree"]
+	cmd = /Applications/SourceTree.app/Contents/Resources/opendiff-w.sh \"$LOCAL\" \"$REMOTE\" -ancestor \"$BASE\" -merge \"$MERGED\"
+	trustExitCode = true
+[diff]
+	tool = vimdiff
+[difftool]
+	prompt = false
+[alias]
+	d  = diff
+	ds  = diff --staged
+	dt = difftool
+	s = status
+	ss = status -s
+	co = checkout
+	cob = checkout -b
+	br = branch
+	ci = commit
+	cm = commit -m
+	csm = commit -S -m
+	csam = commit -S -am
+	visual = '!gitk'
+	unstage = 'reset HEAD --'
+	last = 'log -1 HEAD'
+	up = !git pull --rebase --prune $@ && git submodule update --init --recursive
+	save = !git add -A && git commit -m 'SAVEPOINT'
+	wip = commit -am "WIP"
+	undo = reset HEAD~1 --mixed
+	amend = commit -a --amend
+	wipe = !git add -A && git commit -qm 'WIPE SAVEPOINT' && git reset HEAD~1 --hard
+	bclean = "!f() { git checkout ${1-master} && git branch --merged ${1-master} | grep -v " ${1-master}$" | xargs git branch -d; }; f"
+	bdone = "!f() { git checkout ${1-master} && git up && git bclean ${1-master}; }; f"
+        stno = status --name-only
+	alias = config --get-regex ^alias.
+[pager]
+	branch = false
+	diff = true
+[init]
+	defaultBranch = main

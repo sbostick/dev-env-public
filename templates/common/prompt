@@ -1,0 +1,120 @@
+#!/bin/bash
+#
+# OBSOLETE: using StarShip instead (see starship.toml)
+#
+# This script is sourced by bashrc to set the PS1 environment variable.
+#
+# Breaks tab completion on "Ubuntu 18.04.1 LTS" AMI; not sure where the
+# undefined reference originates but for now avoid `set -u` in the interactive
+# shell configuration (including this prompt configuration).
+if false; then set -u; fi
+
+########################################################################
+#                           PROMPT                                     #
+########################################################################
+
+function prompt::init_colors {
+    ANSI_RED="\033[0;31m"
+    ANSI_BLUE="\033[0;34m"
+    ANSI_BBLUE="\033[1;34m"
+    ANSI_BROWN="\033[0;33m"
+    ANSI_CYAN="\033[0;36m"
+    ANSI_MAGENTA="\033[0;35m"
+    ANSI_NONE="\033[0m"
+
+    XTERM256_GREEN="\033[38;5;10m"
+    XTERM256_WHITE="\033[38;5;15m"
+    XTERM256_BLUE1="\033[38;5;25m"
+    XTERM256_BLUE2="\033[38;5;27m"
+    XTERM256_BLUE3="\033[38;5;33m"
+    XTERM256_MAGENTA="\033[38;5;129m"
+    XTERM256_PINK="\033[38;5;213m"
+    XTERM256_RED="\033[38;5;160m"
+    XTERM256_YELLOW="\033[38;5;227m"
+    XTERM256_BROWN="\033[38;5;243m"
+    XTERM256_CYAN="\033[38;5;44m"
+}
+
+function prompt::timestamp {
+    TIMESTAMP="$(date +%H:%M:%S)"
+    echo -e "${SERVER_CLASS_COLOR}[${TIMESTAMP}]${ANSI_NONE}"
+}
+
+function prompt::smart_cwd {
+    REGEX_SITES="${HOME}/Sites/?(.*)"
+    REGEX_HOME="${HOME}/?(.*)"
+
+    if [[ ${PWD} =~ ${REGEX_SITES} ]]; then
+        CWD_LHS="Sites"
+        CWD_RHS=${BASH_REMATCH[1]}
+        echo -e "${ANSI_BROWN}${CWD_LHS}${ANSI_NONE}/${CWD_RHS}"
+    elif [[ ${PWD} =~ ${REGEX_HOME} ]]; then
+        CWD_LHS="~"
+        CWD_RHS=${BASH_REMATCH[1]}
+        echo -e "${ANSI_BROWN}${CWD_LHS}${ANSI_NONE}/${CWD_RHS}"
+    else
+        echo -e "${ANSI_BROWN}${PWD}${ANSI_NONE}"
+    fi
+}
+
+# Git-prompt is a stand-alone script that can be downloaded from github.
+# > curl -O https://raw.githubusercontent.com/git/git/master/\
+#     contrib/completion/git-prompt.sh
+function prompt::init_git_prompt {
+    GIT_PROMPT_FPATH="${HOME}/.git-prompt.sh"
+    source ${GIT_PROMPT_FPATH}
+}
+
+function prompt::git_status {
+    [[ -f ${GIT_PROMPT_FPATH:-} ]] || return
+
+    # For details, see the git-prompt documentation in the
+    # git-prompt.sh script or at the github project page.
+    export GIT_PS1_SHOWSTASHSTATE=1
+    export GIT_PS1_SHOWDIRTYSTATE=1
+    export GIT_PS1_SHOWUNTRACKEDFILES=1
+    export GIT_PS1_SHOWUPSTREAM="auto"
+    export GIT_PS1_SHOWCOLORHINTS=0
+    export GIT_PS1_HIDE_IF_PWD_IGNORED=0
+    export GIT_PS1_STATESEPARATOR=":"
+    hash __git_ps1 &>/dev/null && \
+      echo -e "[$(__git_ps1 '%s')]"
+}
+
+function prompt::set_ps1 {
+    TIMESTAMP="\$(prompt::timestamp)"
+    GIT_STATUS="\$(prompt::git_status)"
+    SMART_CWD="\$(prompt::smart_cwd)"
+    PS1="${TIMESTAMP} \u@\h:${SMART_CWD}\n${GIT_STATUS}$ "
+}
+
+function prompt::set_server_class {
+    server_class=$1
+    case ${server_class} in
+      development)
+        SERVER_CLASS_COLOR=${ANSI_CYAN}
+        ;;
+      production)
+        SERVER_CLASS_COLOR=${ANSI_RED}
+        ;;
+      infrastructure)
+        SERVER_CLASS_COLOR=${XTERM256_YELLOW}
+        ;;
+      testing)
+        SERVER_CLASS_COLOR=${ANSI_MAGENTA}
+        ;;
+      *)
+        (2> echo "ERROR: unknown server class [$class]")
+        exit 1
+    esac
+}
+
+########################################################################
+#                           MAIN                                       #
+########################################################################
+SERVER_CLASS=development
+
+prompt::init_git_prompt
+prompt::init_colors
+prompt::set_server_class ${SERVER_CLASS}
+prompt::set_ps1

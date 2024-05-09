@@ -1,0 +1,23 @@
+# https://www.gnu.org/software/bash/manual/html_node/Readline-Init-File.html
+
+set editing-mode vi
+set show-all-if-ambiguous on
+set completion-ignore-case on
+set menu-complete-display-prefix on
+
+########################################################################
+#                      keymap for command-mode                         #
+########################################################################
+
+set keymap vi-command
+
+TAB: menu-complete
+
+# (shift + tab)
+"\e[Z": menu-complete-backward
+
+########################################################################
+#                      keymap for insert-mode                          #
+########################################################################
+
+set keymap vi-insert

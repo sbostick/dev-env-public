@@ -1,0 +1,102 @@
+# https://starship.rs/config/
+# https://starship.rs/advanced-config/#continuation-prompt
+# https://starship.rs/advanced-config/#style-strings
+#
+# starship preset --help
+# starship preset bracketed-segments
+
+"$schema" = 'https://starship.rs/config-schema.json'
+add_newline = false
+scan_timeout = 50
+command_timeout = 1000
+
+format = """
+$python\
+$time\
+$shell\
+$username$hostname$directory
+$git_branch\
+$env_var\
+$git_status\
+$character
+"""
+
+[username]
+format = '[$user]($style)'
+show_always = true
+style_root = 'red'
+style_user = '#909090'
+
+[hostname]
+format = '[@$hostname]($style)'
+ssh_only = false
+trim_at = ''
+style = '#909090'
+
+[time]
+format = '\[[$time]($style)\] '
+disabled = false
+style = 'cyan'
+
+[directory]
+format = '[:$path]($style)'
+repo_root_format = '[:$before_root_path]($before_repo_root_style)[$repo_root]($repo_root_style)[$path]($style)[$read_only]($read_only_style) '
+truncate_to_repo = false
+truncation_length = 5
+style = '#909090'
+before_repo_root_style = '#909090'
+repo_root_style = 'cyan'
+
+[git_branch]
+format = '[($symbol$branch )(:$remote_branch)]($style)'
+style = '#909090'
+
+# Disabled since git_commit does not offer equivalent of
+# $ git describe --tags --long --abbrev=8 --dirty
+[git_commit]
+format = '[\($hash\)]($style)'
+style = '#909090'
+only_detached = false
+tag_disabled = true
+tag_max_candidates = 128
+disabled = true
+
+[env_var]
+format = '[(\($env_value\))]($style)'
+variable = 'GIT_COMMIT_ID'
+style = '#656565'
+
+[git_status]
+format = '([\[$all_status$ahead_behind\]]($style))'
+style = 'red'
+
+[python]
+format = '[\((py-${version})($virtualenv)\)]($style) '
+style = '#656565'
+disabled = false
+
+[conda]
+format = '[\($environment\)]($style)'
+style = ''
+
+[aws]
+format = '[$symbol($profile)(\($region\))(\[$duration\])]($style)'
+style = 'bold blue'
+symbol = '🅰 '
+disabled = true
+
+[character]
+success_symbol = '[\$](#656565)'
+error_symbol = '[\$](black bold)'
+vimcmd_symbol = '[\$](black bold)'
+vimcmd_replace_one_symbol = '[\$](black bold)'
+vimcmd_replace_symbol = '[\$](black bold)'
+vimcmd_visual_symbol = '[\$](black bold)'
+disabled = false
+
+[package]
+disabled = true
+
+[shell]
+disabled = false
+style = '#656565'

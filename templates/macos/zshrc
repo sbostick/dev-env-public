@@ -1,0 +1,973 @@
+#!/bin/zsh
+
+########################################################################
+#                    Terminal Colors Helpers                           #
+########################################################################
+
+ANSI_RED="\033[0;31m"
+ANSI_BLUE="\033[0;34m"
+ANSI_BBLUE="\033[1;34m"
+ANSI_BROWN="\033[0;33m"
+ANSI_CYAN="\033[0;36m"
+ANSI_MAGENTA="\033[0;35m"
+ANSI_NONE="\033[0m"
+
+function ansi_red { echo -e "${ANSI_RED}${@}${ANSI_NONE}"; }
+function ansi_red { echo -e "${ANSI_RED}${@}${ANSI_NONE}"; }
+function ansi_blue { echo -e "${ANSI_BLUE}${@}${ANSI_NONE}"; }
+function ansi_bblue { echo -e "${ANSI_BBLUE}${@}${ANSI_NONE}"; }
+function ansi_brown { echo -e "${ANSI_BROWN}${@}${ANSI_NONE}"; }
+function ansi_cyan { echo -e "${ANSI_CYAN}${@}${ANSI_NONE}"; }
+function ansi_magenta { echo -e "${ANSI_MAGENTA}${@}${ANSI_NONE}"; }
+function ansi_none { echo -e "${ANSI_NONE}${@}${ANSI_NONE}"; }
+
+XTERM256_GREEN="\033[38;5;10m"
+XTERM256_WHITE="\033[38;5;15m"
+XTERM256_BLUE1="\033[38;5;25m"
+XTERM256_BLUE2="\033[38;5;27m"
+XTERM256_BLUE3="\033[38;5;33m"
+XTERM256_MAGENTA="\033[38;5;129m"
+XTERM256_PINK="\033[38;5;213m"
+XTERM256_RED="\033[38;5;160m"
+XTERM256_YELLOW="\033[38;5;227m"
+XTERM256_BROWN="\033[38;5;243m"
+XTERM256_CYAN="\033[38;5;44m"
+
+function xterm256_green { echo -e "${XTERM256_GREEN}${@}${ANSI_NONE}"; }
+function xterm256_white { echo -e "${XTERM256_WHITE}${@}${ANSI_NONE}"; }
+function xterm256_blue1 { echo -e "${XTERM256_BLUE1}${@}${ANSI_NONE}"; }
+function xterm256_blue2 { echo -e "${XTERM256_BLUE2}${@}${ANSI_NONE}"; }
+function xterm256_blue3 { echo -e "${XTERM256_BLUE3}${@}${ANSI_NONE}"; }
+function xterm256_magenta { echo -e "${XTERM256_MAGENTA}${@}${ANSI_NONE}"; }
+function xterm256_pink { echo -e "${XTERM256_PINK}${@}${ANSI_NONE}"; }
+function xterm256_red { echo -e "${XTERM256_RED}${@}${ANSI_NONE}"; }
+function xterm256_yellow { echo -e "${XTERM256_YELLOW}${@}${ANSI_NONE}"; }
+function xterm256_brown { echo -e "${XTERM256_BROWN}${@}${ANSI_NONE}"; }
+function xterm256_cyan { echo -e "${XTERM256_CYAN}${@}${ANSI_NONE}"; }
+
+function ERROR { echo "$(xterm256_red ERROR: ${@})"; }
+function WARN { echo "$(xterm256_yellow WARN: ${@})"; }
+function INFO { echo "$(xterm256_brown INFO: ${@})"; }
+function DEBUG { echo "$(xterm256_blue3 DEBUG: ${@})"; }
+
+
+########################################################################
+#                    Globals and helper functions                      #
+########################################################################
+
+function info { >&2 echo "INFO: $*"; }
+function warn { >&2 echo "WARN: $*"; }
+function error { >&2 echo "ERROR: $*"; }
+function errcho { >&2 echo "$@"; }
+function bash_true { ((0 == 0)); }
+function bash_false { ((0 == 1)); }
+function bash_exit_success { info "$@"; bash_true; exit $?; }
+function bash_exit_failure { error "$@"; bash_false; exit $?; }
+function bash_return_success { bash_true; }
+function bash_return_failure { bash_false; }
+
+function join_by { local IFS="$1"; shift; echo "$*"; }
+function path_append { PATH=$(join_by ":" "$PATH" "$1"); export PATH; }
+function path_prepend { PATH=$(join_by ":" "$1" "$PATH"); export PATH; }
+
+function shell_is_zsh { pgrep -fl zsh -P "$$" &>/dev/null; }
+function shell_is_bash { pgrep -fl bash -P "$$" &>/dev/null; }
+function shell_is_zsh_v2 { [[ -n $ZSH_VERSION ]]; }
+function shell_is_bash_v2 { [[ -n $BASH_VERSION ]]; }
+
+function indent {
+  local spaces prefix
+  spaces="${1:-4}"
+  prefix="$(printf " %.0s" $(seq "$spaces"))"
+  sed "s/^/$prefix/g"
+}
+
+function dup_to_log {
+  local transcript="${1:-/tmp/output}"
+  exec > >(tee -i "$transcript") 2>&1
+}
+
+function script_is_being_sourced {
+  # https://stackoverflow.com/a/28336473
+  [[ ${(%):-%N} ]]
+}
+
+function shell_is_interactive {
+  [[ $- == *i* ]]
+}
+
+function util::symtab_lookup {
+  ident=$1
+
+  if shell_is_zsh; then
+    echo "${(P)ident}"
+  elif shell_is_bash; then
+    echo "${!ident}"
+  fi
+}
+
+function precond::var_non_empty {
+  local var_name="$1"
+
+  if shell_is_zsh; then
+    [[ -n "${(P)var_name}" ]] || echo "ERROR: $var_name is not set"
+  elif shell_is_bash; then
+    [[ -n "${!var_name}" ]] || echo "ERROR: $var_name is not set"
+  fi
+}
+
+function precond::file_exists {
+  local path="$1"
+  if ! [[ -e "$path" ]]; then
+    echo "ERROR: file not found [$path]"
+  fi
+}
+
+function var_match_string {
+  local ident="${1:-SAFETY_LATCH_DEFAULT}"
+  local expected="${2}"
+  local actual=$(util::symtab_lookup $ident)
+  info "var_match_string $ident [$expected] [$actual]"
+  [[ "$expected" == "$actual" ]]
+}
+
+function fix_xcode_install {
+    # https://developer.apple.com/forums/thread/703233
+    # https://apple.stackexchange.com/q/254380
+    sudo rm -rf /Library/Developer/CommandLineTools
+    sudo xcode-select --install
+    sudo xcode-select --reset
+    #sudo xcode-select -s /Library/Developer/CommandLineTools
+    sudo xcodebuild -license
+    softwareupdate --list
+    xcode-select --print-path
+}
+
+function generate_random_password {
+  {
+    echo -n "openssl: "; openssl rand -base64 32 | tr -d /=+ | cut -c -20
+    python -c 'import secrets; print("secrets/hex: " + secrets.token_hex(16))'
+    python -c 'import secrets; print("secrets/urlsafe: " + secrets.token_urlsafe(16))'
+    python -c 'import uuid; print("uuid4: " + uuid.uuid4().hex)'
+
+    if command -v uuidgen &>/dev/null; then
+      echo -n "uuidgen: "; uuidgen | tr '[:upper:]' '[:lower:]'
+    fi
+  } | column -t
+}
+
+function show_batcat_themes {
+  while read theme; do
+    echo "[$theme]"
+    bat --theme "$theme" ~/.zshrc
+  done <<<$(bat --list-themes)
+}
+
+function side_by_side_diff {
+    file1="${1:-/tmp/a}"
+    file2="${1:-/tmp/b}"
+    diff --width=200 --suppress-common-lines --side-by-side "$file1" "$file2"
+}
+
+function flush_dns_cache {
+  if uname -a | grep -qi darwin; then
+    echo "Flushing DNS cache on MacOS"
+    sudo dscacheutil -flushcache
+    sudo killall -HUP mDNSResponder
+  fi
+
+  if uname -a | grep -qi linux; then
+    echo "Flushing DNS cache on Linux"
+    sudo systemd-resolve --flush-caches
+    sudo resolvectl flush-caches
+    sudo systemd-resolve --statistics
+    sudo killall -HUP dnsmasq
+  fi
+}
+
+function psport {
+  local PORT=$1
+
+  if uname | grep -qi darwin; then
+    # http://stackoverflow.com/a/4421674
+    sudo lsof -nP "-iTCP:$PORT" | grep LISTEN
+  elif uname | grep -qi linux; then
+    sudo lsof netstat -tulpn | grep -E 'Proto|LISTEN'
+  else
+    echo "ERROR: unknown operating system"
+  fi
+}
+
+# Launch a new shell with a clean environment (no inheritance)
+function clean_shell {
+  local bin="${1:-$SHELL}"
+  /usr/bin/env -i HOME="$HOME" USER="$USER" SHELL="$bin" "$bin" -l
+}
+
+
+########################################################################
+#                            AWS Config                                #
+########################################################################
+
+aws-whoami() {
+  aws sts get-caller-identity
+}
+
+aws-env() {
+  env | grep -E '^AWS_'
+}
+
+aws-unset-all() {
+  unset AWS_PROFILE AWS_DEFAULT_PROFILE
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  unset AWS_EXPIRATION
+}
+
+########################################################################
+#                       GIT UTILITY FUNCTIONS                          #
+########################################################################
+
+# Open github url of the current repository (repo root)
+function ogh {
+  url_full=$(git remote -v | perl -lne '/github.com:(.+)\.git.*fetch/ and print qq(https://github.com/$1)')
+  (set -x; open "$url_full")
+}
+
+# Open github url of the current repository (directory specific)
+function oghd {
+  url_base=$(git remote -v | perl -lne '/github.com:(.+)\.git.*fetch/ and print qq(https://github.com/$1)')
+  root=$(git rev-parse --show-toplevel)
+  branch=$(git rev-parse --abbrev-ref HEAD)
+  subdir=${PWD#$root}
+  url_full="$url_base/tree/$branch/$subdir"
+  url_full=$(echo "$url_full" | perl -pne 's#//#/#g')
+  (set -x; open "$url_full")
+}
+
+# Open gitlab url of the current repository (repo root)
+function ogl {
+  url_full=$(git remote -v | perl -lne '/gitlab.com:(.+)\.git.*fetch/ and print qq(https://gitlab.com/$1)')
+  (set -x; open "$url_full")
+}
+
+# Open gitlab url of the current repository (directory specific)
+function ogld {
+  url_base=$(git remote -v | perl -lne '/gitlab.com:(.+)\.git.*fetch/ and print qq(https://gitlab.com/$1)')
+  root=$(git rev-parse --show-toplevel)
+  branch=$(git rev-parse --abbrev-ref HEAD)
+  subdir=${PWD#$root}
+  url_full="$url_base/tree/$branch/$subdir"
+  url_full=$(echo "$url_full" | perl -pne 's#//#/#g')
+  (set -x; open "$url_full")
+}
+
+# Cleanup local workspace
+function git-clean-dry-run { git clean -n -d; }
+function git-clean-interactive { git clean -i -d; }
+function git-clean-force { git clean -f -d; }
+
+# Branching
+function git-list-local-branches { git branch; }
+function git-list-remote-branches { git branch -r; }
+function git-create-branch { name=$1; git checkout -b $name; }
+function git-delete-branch-local { name=$1; git branch -d "$name"; }
+function git-delete-branch-remote { name=$1; git push origin ":$branch"; }
+function git-prune-dry-run { git remote prune origin --dry-run; }
+function git-prune-live-run { git remote prune origin; }
+
+# Merging
+function git-merge-master-to-current-branch {
+  git fetch master
+  git merge master
+}
+
+# Rebasing
+function git-rebase {
+  return  # demo only
+  git fetch --all
+  git rebase -i master
+  # "pick" the first commit
+  # "squash" seubsequent commits
+  glg -p -n1 --ignore-blank-lines --ignore-all-space
+  git push --force-with-lease
+}
+
+# Tags
+function git-list-tags { git tag -l; }
+function git-list-tags-matching-pattern {
+  pattern="${1:-v*}"; git tag -l "$pattern"; }
+function git-list-tags-with-commit-hash { git show-ref --tags; }
+function git-list-remote-tags { git ls-remote --tags origin; }
+function git-list-closest-tag-on-branch { git describe --abbrev=0 --tags; }
+function git-generate-build-tag { git describe --tags; }
+function git-highest-semver-tag { git tag | sort -V | tail -1; }
+function git-most-recent-tag-scross-branches {
+  git describe --tags $(git rev-list --tags --max-count=1)
+}
+
+# See also -- pysemver3
+# * https://python-semver.readthedocs.io/en/latest/               (code)
+# * https://python-semver.readthedocs.io/en/latest/pysemver.html  (cli)
+function demo-pysemver {
+  # apt-get install python3-semver
+  # pip install semver
+  pysemver bump major "0.1.2"
+  pysemver bump minor "0.1.2"
+  pysemver bump patch "0.1.2"
+  pysemver check "0.0.0"
+  pysemver check "0.1.2"
+  pysemver compare "0.1.2" "1.0.0"
+  pysemver compare "0.1.2" "0.1.2"
+  pysemver compare "0.1.2" "0.0.0"
+}
+
+function git-tag-next-major {
+  current_semver_tag="$(git describe --tags | grep -oE '^v[0-9.]+' | tr -d 'v')"
+  next=$(pysemver bump major "$current_semver_tag")
+  echo "v${next}"
+}
+
+function git-tag-next-minor {
+  current_semver_tag="$(git describe --tags | grep -oE '^v[0-9.]+' | tr -d 'v')"
+  next=$(pysemver bump minor "$current_semver_tag")
+  echo "v${next}"
+}
+
+function git-tag-next-patch {
+  current_semver_tag="$(git describe --tags | grep -oE '^v[0-9.]+' | tr -d 'v')"
+  next=$(pysemver bump patch "$current_semver_tag")
+  echo "v${next}"
+}
+
+function test-git-tag-next-semver {
+  GIT_COMMIT_MESSAGE="testing"
+  echo git tag -a -m "$GIT_COMMIT_MESSAGE" "$(git-tag-next-patch)" "# patch"
+  echo git tag -a -m "$GIT_COMMIT_MESSAGE" "$(git-tag-next-minor)" "# minor"
+  echo git tag -a -m "$GIT_COMMIT_MESSAGE" "$(git-tag-next-major)" "# major"
+}
+
+function git-find-uncommitted-changes {
+  local source_root change_count
+  source_root="${1:-$HOME/source}"
+
+  fd --hidden --type directory --absolute-path \
+     --base-directory "$source_root" \
+     --glob '.git' --max-depth 7 \
+     --exec echo {//} > /tmp/repos
+
+  while read -r repo; do
+    (cd $repo && git diff-index HEAD) &>/dev/null || {
+      >&2 echo "WARNING: no commits found in [$repo]"
+      continue
+    }
+    change_count=$(cd $repo && git diff-index HEAD | awk 'END{print NR}')
+    echo "$change_count,$repo"
+  done < /tmp/repos | sort -k1 -r | column -s, -t
+}
+
+
+########################################################################
+#                            Git Config                                #
+########################################################################
+
+export GLOBAL_GIT_IGNORE_FILE="$HOME/.config/git/ignore"
+git config --global core.excludesfile "$GLOBAL_GIT_IGNORE_FILE"
+mkdir -p "$(dirname "$GLOBAL_GIT_IGNORE_FILE")"
+touch "$GLOBAL_GIT_IGNORE_FILE"
+
+if ! grep -q 'tags' "$GLOBAL_GIT_IGNORE_FILE"; then
+  echo 'tags' >> "$GLOBAL_GIT_IGNORE_FILE"
+fi
+
+if ! grep -q '\*.swp' "$GLOBAL_GIT_IGNORE_FILE"; then
+  echo '*.swp' >> "$GLOBAL_GIT_IGNORE_FILE"
+fi
+
+alias glo='git log --decorate --oneline --graph'
+alias glg='git log --decorate --graph --abbrev-commit --date=relative'
+alias glc='git log --format="%Cred%h%Creset %s %Cgreen(%cr) %C(blue)<%an>%Creset%C(yellow)%d%Creset" --no-merges'
+alias glx='git log --decorate --graph --abbrev-commit --format="%Cred%h%Creset %s %Cgreen(%cr) %C(blue)<%an>%Creset%C(yellow)%d%Creset"'
+alias gitroot='cd $(git rev-parse --show-toplevel)'
+alias gitshowtagbydate='git log --tags --simplify-by-decoration --pretty="format:%ai %d"'
+alias ga='git add -A'
+alias gs='git status'
+alias gd='git diff'
+alias gss='git status -s'
+alias gcm='git commit -m'
+alias gp='git push'
+alias gshow='git show --name-status'  # E.g. gshow <gch>
+alias gshowol='git show --oneline'    # E.g. gshow <gch>
+alias gacm='git add -A; git commit -m "git-add-commit [auto]"'
+alias gacp='git add -A; git commit -m "git-add-commit-push [auto]"; git push'
+alias gst='git tag -n | sort -V'
+
+
+########################################################################
+#                       Mac Software Config                            #
+########################################################################
+
+# REMEMBER TO: brew upgrade
+export HOMEBREW_NO_AUTO_UPDATE=1
+export HOMEBREW_NO_INSTALL_CLEANUP=0
+
+path_prepend "/opt/homebrew/bin/"
+path_append "/opt/homebrew/opt/mysql-client/bin"
+
+function _install_cli_utils {
+  brew install coreutils     # provides "realpath", "greadlink", "gls"
+  brew install 1password-cli # cli for 1password
+  brew install treesitter    # use with nvim-treesitter for lang syntax recognition
+  brew install watch         # standard linux watch command
+  brew install htop          # https://github.com/htop-dev/htop
+  brew install pass          # gnu pass
+  brew install fzf           # fuzzy finder (https://github.com/junegunn/fzf)
+  brew install lazydocker    # textual docker dashboard (go, gocui)
+  brew install ripgrep       # fast smart recursive grep (see ripgreprc)
+  brew install bat           # replacement for cat (https://github.com/sharkdp/bat)
+  brew install exa           # replacement or ls (https://the.exa.website/)
+  brew install fd            # replacement for find (https://github.com/sharkdp/fd)
+  brew install sd            # replacement for sed (https://github.com/chmln/sd)
+  brew install dust          # replacement for du (https://github.com/bootandy/dust)
+  brew install procs         # replacement for ps (https://github.com/dalance/procs)
+  brew install zoxide        # replacement for cd
+  brew install starship      # fast amazing prompt (https://starship.rs/)
+
+  # Terraform
+  brew unlink terraform
+  brew reinstall tfenv
+  tfenv list-remote
+  tfenv install 1.5.3
+  tfenv install 1.6.4
+  tfenv use 1.6.4
+
+  # See doc regarding package naming ('sauce' instead of 'source')
+  # keywords: sourcecodepro, source-code-pro, source code pro, font
+  brew tap homebrew/cask-fonts
+  brew search --casks nerd-font
+  brew install --cask font-hack-nerd-font
+  brew install --cask font-sauce-code-pro-nerd-font
+}
+
+function _homebrew_troubleshooting {
+  brew doctor
+  brew prune
+  brew cleanup --prune
+}
+
+# Show dotfiles in MacOS Finder
+# Toggle in finder: shift + cmd + .
+function macos_finder_show_all_files_true {
+  defaults write com.apple.finder AppleShowAllFiles TRUE
+  killall Finder
+}
+
+function macos_finder_show_all_files_false {
+  defaults write com.apple.finder AppleShowAllFiles FALSE
+  killall Finder
+}
+
+function macos_screencapture_disable_shadow_true {
+  # Disable the drop-shadow and transparent border in screen capture images
+  defaults write com.apple.screencapture disable-shadow -bool true
+  killall SystemUIServer
+}
+
+function macos_screencapture_disable_shadow_false {
+  # Enable the drop-shadow and transparent border in screen capture images
+  defaults write com.apple.screencapture disable-shadow -bool false
+  killall SystemUIServer
+}
+
+# https://apple.stackexchange.com/questions/14001/how-to-turn-off-all-animations-on-os-x#63477
+# NOTE: Also system preferences -> accessibility -> display -> reduce motion
+function macos_disable_animations {
+  defaults write -g NSAutomaticWindowAnimationsEnabled -bool false
+  defaults write -g NSScrollAnimationEnabled -bool false
+  defaults write -g NSWindowResizeTime -float 0.001
+  defaults write -g QLPanelAnimationDuration -float 0
+  defaults write -g NSScrollViewRubberbanding -bool false
+  defaults write -g NSDocumentRevisionsWindowTransformAnimation -bool false
+  defaults write -g NSToolbarFullScreenAnimationDuration -float 0
+  defaults write -g NSBrowserColumnAnimationSpeedMultiplier -float 0
+  defaults write com.apple.dock autohide-time-modifier -float 0
+  defaults write com.apple.dock autohide-delay -float 0
+  defaults write com.apple.dock expose-animation-duration -float 0
+  defaults write com.apple.dock springboard-show-duration -float 0
+  defaults write com.apple.dock springboard-hide-duration -float 0
+  defaults write com.apple.dock springboard-page-duration -float 0
+  defaults write com.apple.finder DisableAllAnimations -bool true
+  defaults write com.apple.Mail DisableSendAnimations -bool true
+  defaults write com.apple.Mail DisableReplyAnimations -bool true
+}
+
+function macos_enable_animations {
+  defaults delete -g NSAutomaticWindowAnimationsEnabled
+  defaults delete -g NSScrollAnimationEnabled
+  defaults delete -g NSWindowResizeTime
+  defaults delete -g QLPanelAnimationDuration
+  defaults delete -g NSScrollViewRubberbanding
+  defaults delete -g NSDocumentRevisionsWindowTransformAnimation
+  defaults delete -g NSToolbarFullScreenAnimationDuration
+  defaults delete -g NSBrowserColumnAnimationSpeedMultiplier
+  defaults delete com.apple.dock autohide-time-modifier
+  defaults delete com.apple.dock autohide-delay
+  defaults delete com.apple.dock expose-animation-duration
+  defaults delete com.apple.dock springboard-show-duration
+  defaults delete com.apple.dock springboard-hide-duration
+  defaults delete com.apple.dock springboard-page-duration
+  defaults delete com.apple.finder DisableAllAnimations
+  defaults delete com.apple.Mail DisableSendAnimations
+  defaults delete com.apple.Mail DisableReplyAnimations
+}
+
+
+########################################################################
+#                          Shell Config (Zsh)                          #
+########################################################################
+
+set -o vi
+umask 0022
+
+TERM=xterm-256color
+INPUTRC="$HOME/.inputrc"
+export TERM INPUTRC
+
+HISTFILE="$HOME/.history"
+HISTSIZE=10000
+SAVEHIST=10000
+export HISTFILE HISTSIZE SAVEHIST
+
+function clear-history {
+  history -p
+  rm -f "${HISTFILE:-/dev/null}"
+}
+
+setopt BANG_HIST               # Treat the '!' character specially during expansion.
+setopt EXTENDED_HISTORY        # Write the history file in the ":start:elapsed; commnad" format.
+setopt INC_APPEND_HISTORY      # Write to the history file immediately, not when the shell exits.
+unsetopt SHARE_HISTORY         # Share history between all sessions.
+setopt HIST_EXPIRE_DUPS_FIRST  # Expire duplicate entries first when trimming history.
+setopt HIST_IGNORE_DUPS        # Don't record an entry that was jsut recored again.
+setopt HIST_IGNORE_ALL_DUPS    # Delete old recored entry if new entry is a duplicate.
+setopt HIST_FIND_NO_DUPS       # Do not display a line previously found.
+setopt HIST_IGNORE_SPACE       # Don't record an entry starting with a space.
+setopt HIST_VERIFY             # Don't execute immediately upon history expansion.
+
+# https://superuser.com/q/476532/190304
+export KEYTIMEOUT=1
+
+# Allow comments even in interactive shells
+# http://zsh.sourceforge.net/Doc/Release/Options.html
+setopt INTERACTIVE_COMMENTS
+
+CASE_SENSITIVE="false"
+HYPHEN_INSENSITIVE="true"
+DISABLE_AUTO_UPDATE="true"
+DISABLE_UPDATE_PROMPT="false"
+export CASE_SENSITIVE HYPHEN_INSENSITIVE DISABLE_AUTO_UPDATE DISABLE_UPDATE_PROMPT
+
+# Perform word splitting with variable expansion before evaluating the result.
+# This is for compatibility with my expectations from bash.
+#
+# Enables this form:
+#   AWS_VAULT="aws-vault exec master-read-only-access"
+#   "$AWS_VAULT" aws s3 ls
+#
+# Otherwise must use this form:
+#   AWS_VAULT=(aws-vault exec master-read-only-access)
+#   "${AWS_VAULT[@]}" aws s3 ls
+set -o shwordsplit
+
+export BAT_THEME="Solarized (dark)"
+
+# MacOS uses LSCOLORS
+# GNU ls uses LS_COLORS
+export LSCOLORS='Hxfxcxdxbxegedabagacad'
+
+# https://github.com/sharkdp/vivid
+if command -v vivid &>/dev/null; then
+  export LS_COLORS=$(vivid generate solarized-dark)
+fi
+
+# https://stackoverflow.com/a/33206814
+export LS_COLORS=$(join_by ':' \
+       'di=1;34:fi=0:ln=31:pi=5:so=5:bd=5:cd=5:or=31' \
+       'mi=0:ex=0;31' \
+       '*.rpm=90' \
+       '*ockerfile=0;90' \
+       '*akefile=0;90')
+
+alias ls="ls --color -FG"
+alias la="ls -FGa"
+alias ll="ls -Fl"
+alias gls="gls --color -FG"
+
+if command -v gls &>/dev/null; then
+  alias ls="gls --color -FG"
+fi
+
+if command -v gmake &>/dev/null; then
+  alias make='gmake'
+fi
+
+if command -v gawk &>/dev/null; then
+  alias awk='gawk'
+fi
+
+if command -v gdate &>/dev/null; then
+  alias date='gdate'
+fi
+
+alias c='clear'
+alias rm="rm -i"
+alias mv="mv -i"
+alias fdhe='fd --hidden --exclude .git --exclude .terraform'
+alias srcgrep='grep -EIinr --exclude-dir .terraform --exclude-dir .git --exclude-dir node_modules'
+alias zshrc='source ~/.zshrc'
+alias foo='vim ~/foo.txt'
+alias bar='vim ~/bar.txt'
+
+# Set tmux window title to the canonical path of the current directory.
+function tmuxify {
+  # title=$(pwd | perl -lne 's#^.*github.com#/# and print')
+  title=$($HOME/bin/get-src-canon-path.py | fzf)
+  (set -x; tmux rename-window "$title")
+}
+
+# Ad-hoc aliases (non-uniform)
+alias github='cd ~/source/github.com/'
+alias gitlab='cd ~/source/gitlab.com/'
+
+if command -v nvim &>/dev/null; then
+  alias vim="nvim"
+  alias view="nvim -R"
+  alias vimdiff="nvim -d"
+
+  export WINEDITOR="nvim"
+  export VISUAL="nvim"
+  export EDITOR="nvim"
+else
+  export WINEDITOR="vim"
+  export VISUAL="vim"
+  export EDITOR="vim"
+fi
+
+# Add git/kubectl subcommand scripts dir to PATH
+path_prepend "$HOME/bin"
+
+# https://github.com/BurntSushi/ripgrep/blob/master/GUIDE.md#configuration-file
+export RIPGREP_CONFIG_PATH="$HOME/.ripgreprc"
+
+# Set GIT_COMMMIT_ID before every prompt so it can be used in starship
+# environment module since the git_status module does not currently support
+# the format I want.
+precmd() {
+  # OPTIMIZE FOR THE COMMON CASE FIRST
+
+  # CASE: in a repo and command succeeds
+  GIT_COMMIT_ID="$(git describe --tags --abbrev=7 2>/dev/null)"
+  if [[ "$?" == 0 ]]; then
+    export GIT_COMMIT_ID
+    return
+  fi
+
+  # CASE: cwd is not within a git repo
+  if ! git rev-parse --is-inside-work-tree &> /dev/null; then
+    GIT_COMMIT_ID="no-repo"
+    export GIT_COMMIT_ID
+    return
+  fi
+
+  # CASE: no commits to repo
+  commit_count=$(git rev-list --all --count)
+  if [[ "$commit_count" -eq "0" ]]; then
+    GIT_COMMIT_ID="no-commits"
+    export GIT_COMMIT_ID
+    return
+  fi
+
+  # CASE: no tags in repo
+  tag_count=$(git tag -n | wc -l)
+  if [[ "$tag_count" -eq "0" ]]; then
+    GIT_COMMIT_ID="no-tags-$(git rev-parse --short HEAD)"
+    export GIT_COMMIT_ID
+    return
+  fi
+
+  # CASE: invalid head reference
+  if ! git rev-parse --verify HEAD &>/dev/null; then
+    GIT_COMMIT_ID="invalid-head"
+    export GIT_COMMIT_ID
+    return
+  fi
+
+  # CASE: need to fix this function
+  GIT_COMMIT_ID="unknown-error"
+  export GIT_COMMIT_ID
+}
+
+# Bash uses PROMPT_COMMAND
+# Zsh uses precmd()
+unset PROMPT_COMMAND
+
+# Activate Starship
+if [[ -z "$STARSHIP_LOADED" ]]; then
+  eval "$(starship init zsh)"
+  STARSHIP_LOADED=1
+fi
+
+# Activate Zoxide
+# eval "$(zoxide init zsh)"
+
+
+########################################################################
+#                            ZSH Completions                           #
+########################################################################
+
+# Manually install if needed
+function setup_gnu_pass_completions() {
+  [[ ! -e "$HOME/zsh-completions/_pass" ]] || return
+  url="https://raw.githubusercontent.com/zx2c4/password-store/master/src/completion/pass.zsh-completion"
+  mkdir -p "$HOME/zsh-completions"
+  curl -sL -o "$HOME/zsh-completions/_pass" "$url"
+}
+
+# Enable Makefile completion of targets only (not files)
+zstyle ':completion:*:*:make:*' tag-order 'targets'
+
+fpath=(~/zsh-completions $fpath)
+
+# Run compinit AFTER configuring fpath
+autoload -Uz compinit && compinit
+
+########################################################################
+#                             Docker                                   #
+########################################################################
+
+function docker-cleanup {
+  docker system df
+  docker system prune --all --force
+}
+
+
+########################################################################
+#                         Kubernetes Config                            #
+########################################################################
+
+alias kx='kubectx'
+alias kn='kubens'
+alias kc='kubectl'
+
+export KUBECTX_IGNORE_FZF=1
+
+########################################################################
+#                            GPG Config                                #
+########################################################################
+
+# Needed for github commit signing (at least with gpg via homebrew)
+GPG_TTY=$(tty)
+export GPG_TTY
+
+function gpg-clear-cache-method-1 {
+  echo RELOADAGENT | gpg-connect-agent
+}
+
+function gpg-clear-cache-method-2 {
+  gpgconf --reload gpg-agent
+}
+
+
+########################################################################
+#                            SSH Config                                #
+########################################################################
+
+# /usr/bin/keychain -k all
+# /usr/bin/keychain --clear $HOME/.ssh/github_rsa
+# ssh-add -A
+# ssh-add -l
+
+
+########################################################################
+#                          GoLang Environment                          #
+########################################################################
+
+# https://golang.org/
+# https://golang.org/doc/
+
+export GOPATH="$HOME/go"
+path_prepend "/usr/local/go/bin"
+path_prepend "$GOPATH/bin"
+
+
+########################################################################
+#                         NodeJS Environment                           #
+########################################################################
+
+# install nvm
+#   brew uninstall node
+#   brew install nvm
+#
+# install nodejs and npm
+#   nvm install v19.9.0  # https://nodejs.org/en/download/releases/
+#   nvm install v21.5.0  # https://nodejs.org/en/download/releases/
+#   nvm use v19.9.0
+#
+# upgrade npm
+#   npm install -g npm
+#
+# install npm packages
+#   npm install postcss-cli
+#
+# install yarn (created by Facebook -- faster and more secure than npm)
+#   npm install --global yarn
+#   yarn --version
+
+export NVM_DIR="$HOME/.nvm"
+mkdir -p "$NVM_DIR"
+
+if [ -s "/opt/homebrew/opt/nvm/nvm.sh" ]; then
+  . "/opt/homebrew/opt/nvm/nvm.sh"
+fi
+if [ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ]; then
+  . "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"
+fi
+
+
+########################################################################
+#                           Rust Environment                           #
+########################################################################
+
+path_prepend "$HOME/.cargo/bin"
+
+
+########################################################################
+#                           Manual PATH overrides                      #
+########################################################################
+
+# Give executables under /usr/local/bin precedence over system-level
+# executables under /usr/bin/. HomeBrew binaries reside in the HomeBrew cellar
+# and are linked under /usr/local/bin.
+
+path_prepend "/usr/local/bin"
+
+
+########################################################################
+#                    Python / Conda / Miniforge                        #
+########################################################################
+
+# https://docs.conda.io/en/latest/miniconda.html  # Download installer
+# https://docs.conda.io/projects/conda/en/latest/user-guide/index.html
+# https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/channels.html
+# https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html
+# https://docs.conda.io/projects/conda/en/latest/commands/index.html
+# https://conda-forge.org/
+# https://anaconda.org/conda-forge
+
+# NOTE!! Python 'flask-nav' is incompatible with Python 3.10+ (2023-03-04)
+
+function _homebrew_python {
+  brew install python3
+  brew link python3
+  brew info python3
+  python3 --version
+}
+
+function _conda_install {
+  open "https://docs.conda.io/en/latest/miniconda.html"
+  conda init "$SHELL"
+}
+
+function _conda_setup {
+  conda deactivate
+  conda config show
+
+  # Find version of python to install
+  conda search python
+  conda search 'python=3.10.'
+  conda search 'python=3.11.'
+  conda search 'python=3.12.'
+
+  # Install Python (manually)
+  conda remove --name 'conda-py-3.11' --all
+  conda env create --name 'conda-py-3.11' 'python==3.11.4'
+
+  # Install Python (using conda env file)
+  conda remove --name 'conda-py-3.11' --all
+  cat > /tmp/conda-env.yaml <<EOF
+name: conda-py-3.11
+dependencies:
+  - attrs
+  - httpie
+  - jmespath
+  - pycodestyle
+EOF
+  conda env create --file /tmp/conda-env.yaml
+
+  # List conda environments
+  conda env list
+  conda info --envs
+  conda info --base
+
+  # Activate an environment
+  conda activate 'conda-py-3.11'
+
+  # Install a package
+  conda list
+  conda search --outdated
+  conda search "beautiful*"
+  conda install boto3
+
+  # Update "conda" package in base environment
+  conda update --name base conda
+
+  # Update all packages in the environment
+  conda update --all -y
+}
+
+function _venv_setup {
+  rm -rf .venv
+  python -m venv .venv
+}
+
+function _venv_activate {
+  source .venv/bin/activate
+  echo "VIRTUAL_ENV is $VIRTUAL_ENV"
+  python --version
+  pip install --upgrade pip
+}
+
+
+# NOTE: Homebrew version of Python enforces venv usage as of 2024.
+# To override and install packages locally:
+#   pip3 install --user --break-system-packages boto3
+function _pip_install_favorites {
+  pip list
+
+  # AWS Tools
+  pip uninstall aws
+  pip install --upgrade boto3 awscli cryptography
+
+  # My favorites
+  pip install --upgrade pip
+  pip install --upgrade wheel pycodestyle attrs peewee uwsgi gunicorn
+  pip install --upgrade flask jinja2 flask-bootstrap flask-nav
+  pip install --upgrade prometheus_flask_exporter
+  pip install --upgrade cryptography httpie jmespath PyYAML
+  pip install --upgrade requests urllib3 tqdm s3transfer pytest
+  pip install --upgrade protobuf grpcio
+  pip install --upgrade graphene SQLAlchemy
+}
+
+function _venv_pip_upgrade_all {
+  pip freeze > requirements.txt
+  perl -p -i -e 's/==/>=/' requirements.txt
+  pip install -r requirements.txt --upgrade
+  pip freeze > requirements.txt
+  git diff requirements.txt
+}
+
+export PYTHONPYCACHEPREFIX="/tmp/__pycache__"
+export CONDA_DEFAULT_ENV="conda-py-3.12"
+
+conda config --set changeps1 False
+conda config --set auto_activate_base False

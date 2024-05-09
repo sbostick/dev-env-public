@@ -1,0 +1,23 @@
+# vim: set ft=confluencewiki:
+
+h1. header
+
+* foo
+** bar
+*** baz
+
+h2. header
+
+{noformat}
+hello
+  world
+{noformat}
+
+h3. header
+
+{code:bash}
+MESSAGE="hello"
+for idx in $(seq 10); do
+  echo "${MESSAGE}"
+done
+{code}

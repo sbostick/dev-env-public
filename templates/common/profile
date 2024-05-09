@@ -1,0 +1,7 @@
+#!/bin/sh
+
+if echo "$SHELL" | grep -q bash; then
+  source "$HOME/.bashrc"
+elif echo "$SHELL" | grep -q zsh; then
+  source "$HOME/.zshrc"
+fi
