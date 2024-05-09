@@ -4,7 +4,7 @@
 [user]
 	name = Shane Bostick
 	email = sbostick@users.noreply.github.com
- 	signingkey = BCCEF09EA13C18A8
+	signingkey = XXXXXXXXXXXXXXXX
 [merge]
 	tool = vimdiff
 [push]

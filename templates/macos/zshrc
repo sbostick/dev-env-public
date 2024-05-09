@@ -431,6 +431,9 @@ function _install_cli_utils {
   brew install procs         # replacement for ps (https://github.com/dalance/procs)
   brew install zoxide        # replacement for cd
   brew install starship      # fast amazing prompt (https://starship.rs/)
+  brew install tmux
+  brew install neovim
+  brew install jq
 
   # Terraform
   brew unlink terraform
@@ -969,5 +972,5 @@ function _venv_pip_upgrade_all {
 export PYTHONPYCACHEPREFIX="/tmp/__pycache__"
 export CONDA_DEFAULT_ENV="conda-py-3.12"
 
-conda config --set changeps1 False
-conda config --set auto_activate_base False
+# conda config --set changeps1 False
+# conda config --set auto_activate_base False
