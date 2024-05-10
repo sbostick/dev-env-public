@@ -34,5 +34,5 @@ unset PROMPT
 unset RPROMPT
 # setopt PROMPT_SUBST
 zstyle ':vcs_info:git:*' formats '%b '
-PS1='%F{#aa8888}%n@%F{#99bbbb}%m:%F{#8888bb}%(5~|%-1~/.../%3~|%4~)%F{white}
+PS1='%F{#d47666}%n@%F{#aaaaaa}%m:%F{#d1bf3b}%(5~|%-1~/.../%3~|%4~)%F{white}
 $ '
