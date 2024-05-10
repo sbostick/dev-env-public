@@ -1,0 +1,39 @@
+#!/bin/zsh
+
+########################################################################
+#                    Globals and helper functions                      #
+########################################################################
+
+function info { >&2 echo "INFO: $*"; }
+function warn { >&2 echo "WARN: $*"; }
+function error { >&2 echo "ERROR: $*"; }
+function errcho { >&2 echo "$@"; }
+function bash_true { ((0 == 0)); }
+function bash_false { ((0 == 1)); }
+function bash_exit_success { info "$@"; bash_true; exit $?; }
+function bash_exit_failure { error "$@"; bash_false; exit $?; }
+function bash_return_success { bash_true; }
+function bash_return_failure { bash_false; }
+
+function join_by { local IFS="$1"; shift; echo "$*"; }
+function path_append { PATH=$(join_by ":" "$PATH" "$1"); export PATH; }
+function path_prepend { PATH=$(join_by ":" "$1" "$PATH"); export PATH; }
+
+function shell_is_zsh { pgrep -fl zsh -P "$$" &>/dev/null; }
+function shell_is_bash { pgrep -fl bash -P "$$" &>/dev/null; }
+function shell_is_zsh_v2 { [[ -n $ZSH_VERSION ]]; }
+function shell_is_bash_v2 { [[ -n $BASH_VERSION ]]; }
+
+
+########################################################################
+#                             Prompt                                   #
+########################################################################
+
+unset PS1
+unset PROMPT
+unset RPROMPT
+setopt PROMPT_SUBST
+zstyle ':vcs_info:git:*' formats '%b '
+autoload -U colors && colors
+PS1="%{$fg[red]%}%n%{$reset_color%}@%m:%{$fg[cyan]%}%(5~|%-1~/.../%3~|%4~)%{$reset_color%}
+$ "
